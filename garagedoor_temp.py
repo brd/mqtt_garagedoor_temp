@@ -8,7 +8,7 @@ import subprocess
 garagedoor = {
   'state_pin': 17,
   'toggle_pin': 18,
-  'status': 0,
+  'status': 3,
   'mqtt_target': 'house/door/garage_target',
   'mqtt_pub': 'house/door/garage'
 }
@@ -83,10 +83,18 @@ def main():
         print(f'garagedoor: 1 and 0')
         garagedoor['status'] = 1
         client.publish(garagedoor['mqtt_pub'], 'Closed')
-      if gd.stdout.rstrip() == "0" and garagedoor['status'] == 1:
+      elif gd.stdout.rstrip() == "0" and garagedoor['status'] == 1:
         print(f'garagedoor: 0 and 1')
         garagedoor['status'] = 0
         client.publish(garagedoor['mqtt_pub'], 'Open')
+      else:
+        if gd.stdout.rstrip() == "0":
+          garagedoor['status'] = 0
+          client.publish(garagedoor['mqtt_pub'], 'Open')
+        if gd.stdout.rstrip() == "1":
+          garagedoor['status'] = 1
+          client.publish(garagedoor['mqtt_pub'], 'Closed')
+
       next_garage_read += 5
 
 
