@@ -22,20 +22,22 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
   print(msg.topic + ' ' + msg.payload.decode("utf-8"))
   if msg.topic == 'house/door/garage_target':
-    print(f'toggle payload: "{msg.payload.decode("utf-8")}"')
-    print(f'brd: {garagedoor}')
-    print(f'toggle garage_target: {garagedoor}; payload: "{msg.payload.decode("utf-8")}"')
-    if garagedoor['status'] == 1 and msg.payload.decode("utf-8") == "Open":
-      trigger_door
+    if garagedoor["status"] == 1 and msg.payload.decode("utf-8") == "Open":
+      print(f'calling trigger_door')
+      trigger_door()
     if garagedoor['status'] == 0 and msg.payload.decode("utf-8") == "Closed":
-      trigger_door
+      trigger_door()
 
 
 def trigger_door():
-  print(f'trigger_door()')
-  subprocess.run(['gpioctl', garagedoor['toggle_pin'], 1])
+  print(f'==> trigger_door()')
+  gpio = subprocess.run(['gpioctl', str(garagedoor['toggle_pin']), "1"], capture_output=True, text=True)
+  if gpio.returncode != 0:
+    print(f'error calling gpioctl: {gpioctl.stdout} {gpioctl.stderr}')
   time.sleep(1)
-  subprocess.run(['gpioctl', garagedoor['toggle_pin'], 0])
+  gpio = subprocess.run(['gpioctl', str(garagedoor['toggle_pin']), "0"], capture_output=True, text=True)
+  if gpio.returncode != 0:
+    print(f'error calling gpioctl: {gpioctl.stdout} {gpioctl.stderr}')
 
 
 def read_temp():
