@@ -30,10 +30,10 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
   print(msg.topic + ' ' + msg.payload.decode("utf-8"))
   if msg.topic == config['mqtt_target']:
-    if config["status"] == 1 and msg.payload.decode("utf-8") == "Open":
+    if config['gd_status'] == 1 and msg.payload.decode("utf-8") == "Open":
       print(f'calling trigger_door')
       trigger_door()
-    if config['status'] == 0 and msg.payload.decode("utf-8") == "Closed":
+    if config['gd_status'] == 0 and msg.payload.decode("utf-8") == "Closed":
       trigger_door()
 
 
@@ -68,18 +68,18 @@ def check_garage_door(config):
   # 1 = closed
   if gd.stdout.rstrip() == "1" and config['gd_status'] == 0:
     print(f'garagedoor: 1 and 0')
-    config['status'] = 1
+    config['gd_status'] = 1
     config['mqttc'].publish(config['gd_mqtt_pub'], 'Closed')
-  elif gd.stdout.rstrip() == "0" and config['status'] == 1:
+  elif gd.stdout.rstrip() == "0" and config['gd_status'] == 1:
     print(f'garagedoor: 0 and 1')
-    config['status'] = 0
+    config['gd_status'] = 0
     config['mqttc'].publish(config['gd_mqtt_pub'], 'Open')
-  else:
+  elif config['gd_status'] == 'unknown':
     if gd.stdout.rstrip() == "0":
-      config['status'] = 0
+      config['gd_status'] = 0
       config['mqttc'].publish(config['gd_mqtt_pub'], 'Open')
     if gd.stdout.rstrip() == "1":
-      config['status'] = 1
+      config['gd_status'] = 1
       config['mqttc'].publish(config['gd_mqtt_pub'], 'Closed')
 
   # Schedule next garage door check
