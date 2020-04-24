@@ -1,104 +1,115 @@
 #!/usr/bin/env python3
 
 import paho.mqtt.client as mqtt
-import time
+import sched
 import subprocess
 
 # Which GPIO pins
-garagedoor = {
-  'state_pin': 17,
-  'toggle_pin': 18,
-  'status': 3,
-  'mqtt_target': 'house/door/garage_target',
-  'mqtt_pub': 'house/door/garage'
+config = {
+  'mqtt_status': 'house/status/garage',
+  'gd_read_interval': 3,
+  'gd_state_pin': 17,
+  'gd_toggle_pin': 18,
+  'gd_status': 'unknown',
+  'gd_mqtt_target': 'house/door/garage_target',
+  'gd_mqtt_pub': 'house/door/garage',
+  'temp_read_interval': 60,
+  'temp_sysctl_fails': 'dev.gpioths.0.fails',
+  'temp_sysctl_temperature': 'dev.gpioths.0.temperature',
+  'temp_sysctl_humidity': 'dev.gpioths.0.humidity',
+  'temp_mqtt_temperature': 'house/garage/temperature',
+  'temp_mqtt_humidity': 'house/garage/humidity'
 }
 
 
 def on_connect(client, userdata, flags, rc):
   print('Connected with result code '+str(rc))
-  client.subscribe(garagedoor['mqtt_target'], 2)
+  client.subscribe(config['mqtt_target'], 2)
 
 
 def on_message(client, userdata, msg):
   print(msg.topic + ' ' + msg.payload.decode("utf-8"))
-  if msg.topic == 'house/door/garage_target':
-    if garagedoor["status"] == 1 and msg.payload.decode("utf-8") == "Open":
+  if msg.topic == config['mqtt_target']:
+    if config["status"] == 1 and msg.payload.decode("utf-8") == "Open":
       print(f'calling trigger_door')
       trigger_door()
-    if garagedoor['status'] == 0 and msg.payload.decode("utf-8") == "Closed":
+    if config['status'] == 0 and msg.payload.decode("utf-8") == "Closed":
       trigger_door()
 
 
 def trigger_door():
   print(f'==> trigger_door()')
-  gpio = subprocess.run(['gpioctl', str(garagedoor['toggle_pin']), "1"], capture_output=True, text=True)
+  gpio = subprocess.run(['gpioctl', str(config['gd_toggle_pin']), "1"], capture_output=True, text=True)
   if gpio.returncode != 0:
     print(f'error calling gpioctl: {gpioctl.stdout} {gpioctl.stderr}')
   time.sleep(1)
-  gpio = subprocess.run(['gpioctl', str(garagedoor['toggle_pin']), "0"], capture_output=True, text=True)
+  gpio = subprocess.run(['gpioctl', str(config['gd_toggle_pin']), "0"], capture_output=True, text=True)
   if gpio.returncode != 0:
     print(f'error calling gpioctl: {gpioctl.stdout} {gpioctl.stderr}')
 
 
-def read_temp():
+def read_temp(config):
   # sysctls: dev.gpioths.0.fails, dev.gpioths.0.humidity, dev.gpioths.0.temperature
-  fails = subprocess.run(['sysctl', '-n', 'dev.gpioths.0.fails'], capture_output=True, text=True)
+  fails = subprocess.run(['sysctl', '-n', config['temp_sysctl_fails']], capture_output=True, text=True)
   if fails.stdout.rstrip() == "0":
-    ht = { }
-    ht['h'] = subprocess.run(['sysctl', '-n', 'dev.gpioths.0.humidity'], capture_output=True, text=True).stdout.rstrip()
-    ht['t'] = subprocess.run(['sysctl', '-n', 'dev.gpioths.0.temperature'], capture_output=True, text=True).stdout.rstrip()
-    return ht
-  return None
+    h = subprocess.run(['sysctl', '-n', config['temp_sysctl_humidity']], capture_output=True, text=True).stdout.rstrip()
+    t = subprocess.run(['sysctl', '-n', config['temp_sysctl_temperature']], capture_output=True, text=True).stdout.rstrip()
+    print(f'publish: temp: {t}; humidity: {h}')
+    config['mqttc'].publish(config['temp_mqtt_temperature'], t)
+    config['mqttc'].publish(config['temp_mqtt_humidity'], h)
+
+  # Schedule next temp read
+  config['s'].enter(config['temp_read_interval'], 1, read_temp, argument=(config,))
+
+
+def check_garage_door(config):
+  gd = subprocess.run(['gpioctl', str(config['gd_state_pin'])], capture_output=True, text=True)
+  print(f'check garage door: status: {config["gd_status"]}; state: {gd.stdout.rstrip()}')
+  # 1 = closed
+  if gd.stdout.rstrip() == "1" and config['gd_status'] == 0:
+    print(f'garagedoor: 1 and 0')
+    config['status'] = 1
+    config['mqttc'].publish(config['gd_mqtt_pub'], 'Closed')
+  elif gd.stdout.rstrip() == "0" and config['status'] == 1:
+    print(f'garagedoor: 0 and 1')
+    config['status'] = 0
+    config['mqttc'].publish(config['gd_mqtt_pub'], 'Open')
+  else:
+    if gd.stdout.rstrip() == "0":
+      config['status'] = 0
+      config['mqttc'].publish(config['gd_mqtt_pub'], 'Open')
+    if gd.stdout.rstrip() == "1":
+      config['status'] = 1
+      config['mqttc'].publish(config['gd_mqtt_pub'], 'Closed')
+
+  # Schedule next garage door check
+  config['s'].enter(config['gd_read_interval'], 2, check_garage_door, argument=(config,))
 
 
 def main():
-  next_temp_read = time.time()
-  next_garage_read = time.time()
 
   # Setup MQTT
-  client = mqtt.Client()
-  client.will_set('house/status/garage', 'false')
-  client.on_connect = on_connect
-  client.on_message = on_message
-  client.connect('192.168.1.31')
-  client.loop_start()
+  config['mqttc'] = mqtt.Client()
+  config['mqttc'].will_set(config['mqtt_status'], 'false')
+  config['mqttc'].on_connect = on_connect
+  config['mqttc'].on_message = on_message
+  config['mqttc'].connect('192.168.1.31')
+  config['mqttc'].loop_start()
+
+  # Setup scheduler
+  config['s'] = sched.scheduler()
 
   # send active message
-  client.publish('house/status/garage', 'true')
+  config['mqttc'].publish(config['mqtt_status'], 'true')
 
-  while True:
-    # Publish temp
-    if time.time() > next_temp_read:
-      ht = read_temp()
-      if ht != None:
-        print(f'publish: temp: {ht["t"]}; humidity: {ht["h"]}')
-        client.publish('house/garage/temperature', ht['t'])
-        client.publish('house/garage/humidity', ht['h'])
-        next_temp_read += 60
+  # Schedule first temp check
+  config['s'].enter(2, 1, read_temp, argument=(config,))
 
-    # Check garage door
-    if time.time() > next_garage_read:
-      gd = subprocess.run(['gpioctl', str(garagedoor['state_pin'])], capture_output=True, text=True)
-      print(f'check garage door: status: {garagedoor["status"]}; state: {gd.stdout.rstrip()}')
-      # 1 = closed
-      if gd.stdout.rstrip() == "1" and garagedoor['status'] == 0:
-        print(f'garagedoor: 1 and 0')
-        garagedoor['status'] = 1
-        client.publish(garagedoor['mqtt_pub'], 'Closed')
-      elif gd.stdout.rstrip() == "0" and garagedoor['status'] == 1:
-        print(f'garagedoor: 0 and 1')
-        garagedoor['status'] = 0
-        client.publish(garagedoor['mqtt_pub'], 'Open')
-      else:
-        if gd.stdout.rstrip() == "0":
-          garagedoor['status'] = 0
-          client.publish(garagedoor['mqtt_pub'], 'Open')
-        if gd.stdout.rstrip() == "1":
-          garagedoor['status'] = 1
-          client.publish(garagedoor['mqtt_pub'], 'Closed')
+  # Schedule first garage door check
+  config['s'].enter(config['gd_read_interval'], 2, check_garage_door, argument=(config,))
 
-      next_garage_read += 5
-
+  # Run
+  config['s'].run()
 
 if __name__ == '__main__':
   main()
