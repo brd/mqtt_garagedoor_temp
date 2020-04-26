@@ -24,12 +24,12 @@ config = {
 
 def on_connect(client, userdata, flags, rc):
   print('Connected with result code '+str(rc))
-  client.subscribe(config['mqtt_target'], 2)
+  client.subscribe(config['gd_mqtt_target'], 2)
 
 
 def on_message(client, userdata, msg):
   print(msg.topic + ' ' + msg.payload.decode("utf-8"))
-  if msg.topic == config['mqtt_target']:
+  if msg.topic == config['gd_mqtt_target']:
     if config['gd_status'] == 1 and msg.payload.decode("utf-8") == "Open":
       print(f'calling trigger_door')
       trigger_door()
