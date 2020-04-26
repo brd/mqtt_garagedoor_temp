@@ -34,6 +34,7 @@ def on_message(client, userdata, msg):
       print(f'calling trigger_door')
       trigger_door()
     if config['gd_status'] == 0 and msg.payload.decode("utf-8") == "Closed":
+      print(f'calling trigger_door')
       trigger_door()
 
 
@@ -76,9 +77,11 @@ def check_garage_door(config):
     config['mqttc'].publish(config['gd_mqtt_pub'], 'Open')
   elif config['gd_status'] == 'unknown':
     if gd.stdout.rstrip() == "0":
+      print(f'publish: door open')
       config['gd_status'] = 0
       config['mqttc'].publish(config['gd_mqtt_pub'], 'Open')
     if gd.stdout.rstrip() == "1":
+      print(f'publish: door closed')
       config['gd_status'] = 1
       config['mqttc'].publish(config['gd_mqtt_pub'], 'Closed')
 
