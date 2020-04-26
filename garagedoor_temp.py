@@ -17,8 +17,8 @@ config = {
   'temp_sysctl_fails': 'dev.gpioths.0.fails',
   'temp_sysctl_temperature': 'dev.gpioths.0.temperature',
   'temp_sysctl_humidity': 'dev.gpioths.0.humidity',
-  'temp_mqtt_temperature': 'house/garage/temperature',
-  'temp_mqtt_humidity': 'house/garage/humidity'
+  'temp_mqtt_temperature': 'house/temperature/garage',
+  'temp_mqtt_humidity': 'house/humidity/garage'
 }
 
 
