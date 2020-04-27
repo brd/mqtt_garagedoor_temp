@@ -55,8 +55,8 @@ def read_temp(config):
   fails = subprocess.run(['sysctl', '-n', config['temp_sysctl_fails']], capture_output=True, text=True)
   if fails.stdout.rstrip() == "0":
     h = subprocess.run(['sysctl', '-n', config['temp_sysctl_humidity']], capture_output=True, text=True).stdout.rstrip()
-    t = subprocess.run(['sysctl', '-n', config['temp_sysctl_temperature']], capture_output=True, text=True).stdout.rstrip()
-    print(f'publish: temp: {t}; humidity: {h}')
+    t = subprocess.run(['sysctl', '-n', config['temp_sysctl_temperature']], capture_output=True, text=True).stdout.rstrip().rstrip('C')
+    print(f'publish: temp: {t}C; humidity: {h}')
     config['mqttc'].publish(config['temp_mqtt_temperature'], t)
     config['mqttc'].publish(config['temp_mqtt_humidity'], h)
 
