@@ -59,6 +59,8 @@ def read_temp(config):
     print(f'publish: temp: {t}C; humidity: {h}')
     config['mqttc'].publish(config['temp_mqtt_temperature'], t)
     config['mqttc'].publish(config['temp_mqtt_humidity'], h)
+  else:
+    print(f'temperature sensor fail count: {fails.stdout.rstrip()}')
 
   # Schedule next temp read
   config['s'].enter(config['temp_read_interval'], 1, read_temp, argument=(config,))
